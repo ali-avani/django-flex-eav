@@ -31,6 +31,12 @@ class ValidatorBase:
         pass
 
     @abstractmethod
+    def to_value(self, value) -> Any:
+        """
+        Converts the value to a valid value for the validator."""
+        return value
+
+    @abstractmethod
     def validate_kwargs(self, **kwargs):
         """
         Raises a ValidationError if the kwargs are invalid"""
@@ -96,14 +102,20 @@ class RangeValidator(ValidatorBase):
             raise ValidationError(_("min_value and max_value are required"))
 
         if not all(map(lambda x: str(x).isdigit, (min_value, max_value))):
-            raise ValidationError(_("min_value and max_value must be integers"))
+            raise ValidationError(_("min_value and max_value must be number"))
 
     def validate(self, value):
         try:
             if not (self.min_value <= float(value) <= self.max_value):
                 raise ValidationError(_("Value is not in range: %s - %s") % (self.min_value, self.max_value))
         except ValueError:
-            raise ValidationError(_("Value must be an integer"))
+            raise ValidationError(_("Value must be an number"))
+
+    def to_value(self, value):
+        value = float(value)
+        if value.is_integer():
+            return int(value)
+        return value
 
 
 @register

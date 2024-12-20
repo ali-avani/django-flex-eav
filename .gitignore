@@ -26,6 +26,7 @@ django/assets/
 # Distribution / packaging
 .Python
 build/
+dist/
 develop-eggs/
 downloads/
 eggs/

@@ -58,6 +58,7 @@ class EavValue(models.Model):
 
         for validator in attribute.get_validator_instances():
             validator.validate(self.value)
+            self.value = validator.to_value(self.value)
 
     @classmethod
     def validate_fields(cls):
