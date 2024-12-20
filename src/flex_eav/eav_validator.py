@@ -19,8 +19,8 @@ class ValidatorBase:
     @classmethod
     def initialize_from_kwargs(cls, **kwargs):
         with contextlib.suppress(KeyError, AttributeError, ValueError):
-            cls.validate_kwargs(cls, **(instance_kwargs := kwargs.get(cls.slug)))
-            return cls(**instance_kwargs)
+            cls.validate_kwargs(cls, **kwargs)
+            return cls(**kwargs)
 
         raise ValueError(f"Invalid kwargs for {cls.__name__}. Valid kwargs are {cls.get_instance_kwargs(cls.__init__)}")
 
@@ -41,6 +41,10 @@ class ValidatorBase:
         """
         Raises a ValidationError if the kwargs are invalid"""
         pass
+
+    @classmethod
+    def get_kwargs_slug(cls):
+        return cls.slug
 
     @abstractmethod
     def __init__(self, **validator_kwargs: dict[str, Any]):
@@ -72,12 +76,13 @@ register = ValidatorRegistry.register
 class RegexValidator(ValidatorBase):
     title = _("Regex")
     slug = "regex"
+    _kwargs_slug = "pattern"
 
-    def __init__(self, pattern: str):
-        self.pattern = pattern
+    def __init__(self, **kwargs):
+        self.pattern = kwargs.get(self._kwargs_slug)
 
     def validate_kwargs(self, **kwargs):
-        if not ((pattern := kwargs.get("pattern")) and isinstance(pattern, str)):
+        if not ((pattern := kwargs.get(self._kwargs_slug)) and isinstance(pattern, str)):
             raise ValidationError(_("Pattern is required"))
 
     def validate(self, value):
@@ -89,14 +94,17 @@ class RegexValidator(ValidatorBase):
 class RangeValidator(ValidatorBase):
     title = _("Range")
     slug = "range"
+    _kwargs_slug = slug
 
-    def __init__(self, min_value: int, max_value: int):
-        self.min_value = min_value
-        self.max_value = max_value
+    def __init__(self, **kwargs):
+        _range = kwargs.get(self._kwargs_slug, {})
+        self.min_value = _range.get("min_value")
+        self.max_value = _range.get("max_value")
 
     def validate_kwargs(self, **kwargs):
-        min_value = kwargs.get("min_value")
-        max_value = kwargs.get("max_value")
+        _range = kwargs.get(self._kwargs_slug, {})
+        min_value = _range.get("min_value")
+        max_value = _range.get("max_value")
 
         if not all((v is not None for v in (min_value, max_value))):
             raise ValidationError(_("min_value and max_value are required"))
@@ -122,9 +130,14 @@ class RangeValidator(ValidatorBase):
 class ChoiceValidator(ValidatorBase):
     title = _("Choice")
     slug = "choice"
+    _kwargs_slug = "choices"
 
     def __init__(self, choices: List[str]):
         self.choices = choices
+
+    @classmethod
+    def get_kwargs_slug(cls):
+        return cls._kwargs_slug
 
     def validate_kwargs(self, **kwargs):
         if not (choices := kwargs.get("choices")):
@@ -135,4 +148,4 @@ class ChoiceValidator(ValidatorBase):
 
     def validate(self, value: str):
         if value.lower() not in map(str.lower, self.choices):
-            raise ValidationError({_("Value is not in choices. Valid choices are: %s") % ", ".join(self.choices)})
+            raise ValidationError(_("Value is not in choices. Valid choices are: %s") % ", ".join(self.choices))
