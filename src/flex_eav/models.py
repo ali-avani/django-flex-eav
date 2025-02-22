@@ -1,9 +1,11 @@
+from typing import Dict, List, Type
+
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.forms import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from .eav_validator import ValidatorRegistry
+from .eav_validator import ValidatorBase, ValidatorRegistry
 from .utils import validate_field_exists
 
 
@@ -22,18 +24,31 @@ class EavAttribute(models.Model):
     def __str__(self):
         return self.title
 
-    def get_validator_instances(self):
+    @classmethod
+    def get_model_validators(cls) -> Dict[str, Type[ValidatorBase]]:
+        return {}
+
+    def get_validator_instances(self) -> List[ValidatorBase]:
         try:
             validator_instances = [
-                ValidatorRegistry.get_validator(validator_slug).initialize_from_kwargs(**self.validator_kwargs)
+                validator.initialize_from_kwargs(**self.validator_kwargs)
                 for validator_slug in self.validators
-                if ValidatorRegistry.get_validator(validator_slug)
+                if (
+                    validator := ValidatorRegistry.get_validator(
+                        validator_slug,
+                        self.get_model_validators(),
+                    )
+                )
             ]
         except ValidationError as e:
-            raise ValidationError({EavAttribute.validator_kwargs.field.name: next(iter(e.messages))}) from e
+            raise ValidationError(
+                {EavAttribute.validator_kwargs.field.name: next(iter(e.messages))}
+            ) from e
 
         if len(validator_instances) != len(self.validators):
-            missing_validators = set(self.validators) - {v.slug for v in validator_instances}
+            missing_validators = set(self.validators) - {
+                v.slug for v in validator_instances
+            }
             raise ValueError(f"Validators {', '.join(missing_validators)} do not exist")
 
         return validator_instances
@@ -49,10 +64,10 @@ class EavAttribute(models.Model):
 
 class EavValue(models.Model):
     attribute_field_name = "attribute"
-    value = models.CharField(max_length=255, verbose_name=_("Value"))
+    value = models.TextField(verbose_name=_("Value"))
 
     def clean(self):
-        attribute = getattr(self, self.attribute_field_name, None)
+        attribute: EavAttribute = getattr(self, self.attribute_field_name, None)
         if not attribute:
             raise ValueError("Attribute is required to be implemented.")
 

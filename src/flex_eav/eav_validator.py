@@ -11,11 +11,12 @@ from django.utils.translation import gettext_lazy as _
 class ValidatorBase:
     title: str
     slug: str
+    help_text: str = ""
 
     @staticmethod
     def get_instance_kwargs(callable: Callable, **kwargs):
         return set(signature(callable).parameters)
-
+    
     @classmethod
     def initialize_from_kwargs(cls, **kwargs):
         with contextlib.suppress(KeyError, AttributeError, ValueError):
@@ -61,8 +62,8 @@ class ValidatorRegistry:
         cls.validators[validator.slug] = validator
 
     @classmethod
-    def get_validator(cls, slug):
-        return cls.validators.get(slug)
+    def get_validator(cls, slug, extra_validators = {}):
+        return (extra_validators | cls.validators).get(slug)
 
     @classmethod
     def get_choices(cls):
@@ -76,10 +77,11 @@ register = ValidatorRegistry.register
 class RegexValidator(ValidatorBase):
     title = _("Regex")
     slug = "regex"
+    help_text = _("Validates values based on given RegEx patterns.")
     _kwargs_slug = "pattern"
 
-    def __init__(self, **kwargs):
-        self.pattern = kwargs.get(self._kwargs_slug)
+    def __init__(self, *, pattern=None, **kwargs):
+        self.pattern = pattern
 
     def validate_kwargs(self, **kwargs):
         if not ((pattern := kwargs.get(self._kwargs_slug)) and isinstance(pattern, str)):
@@ -94,12 +96,12 @@ class RegexValidator(ValidatorBase):
 class RangeValidator(ValidatorBase):
     title = _("Range")
     slug = "range"
+    help_text = _("Validates values based on given range.")
     _kwargs_slug = slug
 
-    def __init__(self, **kwargs):
-        _range = kwargs.get(self._kwargs_slug, {})
-        self.min_value = _range.get("min_value")
-        self.max_value = _range.get("max_value")
+    def __init__(self, *, min_value=None, max_value=None, **kwargs):
+        self.min_value = min_value
+        self.max_value = max_value
 
     def validate_kwargs(self, **kwargs):
         _range = kwargs.get(self._kwargs_slug, {})
@@ -130,6 +132,7 @@ class RangeValidator(ValidatorBase):
 class ChoiceValidator(ValidatorBase):
     title = _("Choice")
     slug = "choice"
+    help_text = _("Validates values based on given choices.")
     _kwargs_slug = "choices"
 
     def __init__(self, choices: List[str]):
@@ -139,8 +142,8 @@ class ChoiceValidator(ValidatorBase):
     def get_kwargs_slug(cls):
         return cls._kwargs_slug
 
-    def validate_kwargs(self, **kwargs):
-        if not (choices := kwargs.get("choices")):
+    def validate_kwargs(self, *, choices=None, **kwargs):
+        if not choices:
             raise ValidationError(_("Choices are required"))
 
         if not isinstance(choices, list):
