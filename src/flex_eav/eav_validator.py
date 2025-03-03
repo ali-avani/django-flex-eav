@@ -5,6 +5,7 @@ from inspect import signature
 from typing import Any, Callable, List
 
 from django.core.exceptions import ValidationError
+from typing import TypedDict, Optional
 from django.utils.translation import gettext_lazy as _
 
 
@@ -16,14 +17,16 @@ class ValidatorBase:
     @staticmethod
     def get_instance_kwargs(callable: Callable, **kwargs):
         return set(signature(callable).parameters)
-    
+
     @classmethod
     def initialize_from_kwargs(cls, **kwargs):
         with contextlib.suppress(KeyError, AttributeError, ValueError):
             cls.validate_kwargs(cls, **kwargs)
             return cls(**kwargs)
 
-        raise ValueError(f"Invalid kwargs for {cls.__name__}. Valid kwargs are {cls.get_instance_kwargs(cls.__init__)}")
+        raise ValueError(
+            f"Invalid kwargs for {cls.__name__}. Valid kwargs are {cls.get_instance_kwargs(cls.__init__)}"
+        )
 
     @abstractmethod
     def validate(self, value) -> None:
@@ -62,7 +65,7 @@ class ValidatorRegistry:
         cls.validators[validator.slug] = validator
 
     @classmethod
-    def get_validator(cls, slug, extra_validators = {}):
+    def get_validator(cls, slug, extra_validators={}):
         return (extra_validators | cls.validators).get(slug)
 
     @classmethod
@@ -84,12 +87,19 @@ class RegexValidator(ValidatorBase):
         self.pattern = pattern
 
     def validate_kwargs(self, **kwargs):
-        if not ((pattern := kwargs.get(self._kwargs_slug)) and isinstance(pattern, str)):
+        if not (
+            (pattern := kwargs.get(self._kwargs_slug)) and isinstance(pattern, str)
+        ):
             raise ValidationError(_("Pattern is required"))
 
     def validate(self, value):
         if not re.match(self.pattern, value):
             raise ValidationError(_("Value does not match regex"))
+
+
+class RangeValidatorType(TypedDict):
+    min_value: Optional[int | float]
+    max_value: Optional[int | float]
 
 
 @register
@@ -99,9 +109,9 @@ class RangeValidator(ValidatorBase):
     help_text = _("Validates values based on given range.")
     _kwargs_slug = slug
 
-    def __init__(self, *, min_value=None, max_value=None, **kwargs):
-        self.min_value = min_value
-        self.max_value = max_value
+    def __init__(self, *, range: RangeValidatorType = None, **kwargs):
+        self.min_value = range.get("min_value")
+        self.max_value = range.get("max_value")
 
     def validate_kwargs(self, **kwargs):
         _range = kwargs.get(self._kwargs_slug, {})
@@ -117,7 +127,10 @@ class RangeValidator(ValidatorBase):
     def validate(self, value):
         try:
             if not (self.min_value <= float(value) <= self.max_value):
-                raise ValidationError(_("Value is not in range: %s - %s") % (self.min_value, self.max_value))
+                raise ValidationError(
+                    _("Value is not in range: %s - %s")
+                    % (self.min_value, self.max_value)
+                )
         except ValueError:
             raise ValidationError(_("Value must be an number"))
 
@@ -151,4 +164,7 @@ class ChoiceValidator(ValidatorBase):
 
     def validate(self, value: str):
         if value.lower() not in map(str.lower, self.choices):
-            raise ValidationError(_("Value is not in choices. Valid choices are: %s") % ", ".join(self.choices))
+            raise ValidationError(
+                _("Value is not in choices. Valid choices are: %s")
+                % ", ".join(self.choices)
+            )
